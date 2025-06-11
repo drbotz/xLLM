@@ -52,18 +52,30 @@ def process_csv(input_path, output_path, model, log_widget):
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Chat Processor GUI")
+        root.title("xLLM - Main GUI")
         self.models = get_available_models()
         self.model_var = tk.StringVar(value=self.models[0])
 
-        ttk.Label(root, text="Choose model:").grid(row=0, column=0, sticky="w")
-        ttk.Combobox(root, values=self.models, textvariable=self.model_var, width=40).grid(row=0, column=1)
+        # Main container
+        main = ttk.Frame(root, padding=20)
+        main.grid(row=0, column=0, sticky="nsew")
+        root.resizable(False, False)
 
-        ttk.Button(root, text="Insert API Key", command=self.set_api_key).grid(row=1, column=0)
-        ttk.Button(root, text="CSV Mode", command=self.csv_mode).grid(row=1, column=1)
-        ttk.Button(root, text="Interactive Mode", command=self.interactive_mode).grid(row=1, column=2)
+        # Model selector
+        ttk.Label(main, text="Choose model:").pack(anchor="w", pady=(0, 5))
+        ttk.Combobox(main, values=self.models, textvariable=self.model_var, state="readonly", width=30).pack(fill="x", pady=(0, 15))
+
+        # Row: CSV & Interactive Mode side-by-side
+        button_row = ttk.Frame(main)
+        button_row.pack(fill="x", pady=5)
+        ttk.Button(button_row, text="CSV Mode", command=self.csv_mode).pack(side="left", expand=True, fill="x", padx=(0, 5))
+        ttk.Button(button_row, text="Interactive Mode", command=self.interactive_mode).pack(side="left", expand=True, fill="x", padx=(5, 0))
+
+        # Insert API Key below
+        ttk.Button(main, text="Insert API Key", command=self.set_api_key).pack(fill="x", pady=(15, 0))
 
         self.log = scrolledtext.ScrolledText(root, width=80, height=20, state="disabled")
+
 
     def set_api_key(self):
         global client
