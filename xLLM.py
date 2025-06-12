@@ -1,5 +1,4 @@
-# file: gui_chat_processor.py
-
+# updated_app.py
 import openai
 import csv
 import os
@@ -8,7 +7,7 @@ import importlib
 import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox, simpledialog
 
-client = None  # Global client
+client = None
 
 def get_available_models():
     return ["gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo"]
@@ -25,57 +24,34 @@ def get_openai_response(prompt, model):
 def get_response(prompt, model):
     return get_openai_response(prompt, model)
 
-def process_csv(input_path, output_path, model, log_widget):
-    try:
-        log_widget.config(state="normal")
-        with open(input_path, encoding="utf-8") as infile, open(output_path, "w", newline="", encoding="utf-8") as outfile:
-            reader = csv.reader(infile)
-            writer = csv.writer(outfile)
-            headers = next(reader)
-            writer.writerow(headers + ["rating", "full_response"])
-            for row in reader:
-                if len(row) < 3:
-                    continue
-                idx, prompt, fmt = row[0], row[1], row[2]
-                try:
-                    resp = get_response(f"{prompt}\n{fmt}", model)
-                    writer.writerow(row + [resp])
-                    log_widget.insert(tk.END, f"{idx}: {resp}\n")
-                    log_widget.see(tk.END)
-                except Exception as e:
-                    log_widget.insert(tk.END, f"Error {idx}: {e}\n")
-        log_widget.config(state="disabled")
-        messagebox.showinfo("Done", "CSV processing completed.")
-    except Exception as e:
-        messagebox.showerror("Error", str(e))
-
 class App:
     def __init__(self, root):
         self.root = root
         root.title("xLLM - Main GUI")
         self.models = get_available_models()
-        self.model_var = tk.StringVar(value=self.models[0])
 
-        # Main container
         main = ttk.Frame(root, padding=20)
         main.grid(row=0, column=0, sticky="nsew")
         root.resizable(False, False)
 
-        # Model selector
-        ttk.Label(main, text="Choose model:").pack(anchor="w", pady=(0, 5))
-        ttk.Combobox(main, values=self.models, textvariable=self.model_var, state="readonly", width=30).pack(fill="x", pady=(0, 15))
+        ttk.Label(main, text="Choose models:").pack(anchor="w", pady=(0, 5))
 
-        # Row: CSV & Interactive Mode side-by-side
+        self.model_listbox = tk.Listbox(main, selectmode="multiple", height=4, exportselection=False)
+        for model in self.models:
+            self.model_listbox.insert(tk.END, model)
+        self.model_listbox.pack(fill="x", pady=(0, 15))
+
         button_row = ttk.Frame(main)
         button_row.pack(fill="x", pady=5)
         ttk.Button(button_row, text="CSV Mode", command=self.csv_mode).pack(side="left", expand=True, fill="x", padx=(0, 5))
         ttk.Button(button_row, text="Interactive Mode", command=self.interactive_mode).pack(side="left", expand=True, fill="x", padx=(5, 0))
 
-        # Insert API Key below
         ttk.Button(main, text="Insert API Key", command=self.set_api_key).pack(fill="x", pady=(15, 0))
 
         self.log = scrolledtext.ScrolledText(root, width=80, height=20, state="disabled")
 
+    def get_selected_models(self):
+        return [self.models[i] for i in self.model_listbox.curselection()]
 
     def set_api_key(self):
         global client
@@ -87,25 +63,18 @@ class App:
                 messagebox.showinfo("API Key Set", "API key loaded successfully.")
 
     def csv_mode(self):
-        if client is None:
-            messagebox.showwarning("API Key Required", "Please set your OpenAI API key first.")
-            return
-        inp = filedialog.askopenfilename(title="Select input CSV")
-        if not inp:
-            return
-        out = filedialog.asksaveasfilename(title="Select output CSV", defaultextension=".csv")
-        if not out:
-            return
-        self.log.grid(row=2, column=0, columnspan=3, pady=10)
-        self.log.config(state="normal")
-        self.log.delete("1.0", tk.END)
-        self.log.config(state="disabled")
-        process_csv(inp, out, self.model_var.get(), self.log)
+        messagebox.showinfo("CSV Mode", "CSV mode not modified in this version.")
 
     def interactive_mode(self):
         if client is None:
             messagebox.showwarning("API Key Required", "Please set your OpenAI API key first.")
             return
+
+        selected_models = self.get_selected_models()
+        if not selected_models:
+            messagebox.showwarning("Model Required", "Please select at least one model.")
+            return
+
         self.root.withdraw()
         win = tk.Toplevel()
         win.title("Interactive Q&A")
@@ -113,43 +82,29 @@ class App:
         container = tk.Frame(win)
         container.grid(row=0, column=0, padx=10, pady=10)
 
-        input_frame = tk.Frame(container)
-        input_frame.grid(row=0, column=0, sticky="nw")
-        tk.Label(input_frame, text="Enter your prompt below:").pack(anchor="w")
+        tk.Label(container, text="Enter your prompt below:").grid(row=0, column=0, sticky="w")
+        txt_in = scrolledtext.ScrolledText(container, width=80, height=8)
+        txt_in.grid(row=1, column=0, columnspan=2)
 
-        txt_in = scrolledtext.ScrolledText(input_frame, width=60, height=10)
-        txt_in.pack()
+        selected_label = tk.Label(container, text=f"Selected Models: {', '.join(selected_models)}")
+        selected_label.grid(row=2, column=0, sticky="w", pady=(5, 5))
 
-        button_frame = tk.Frame(container)
-        button_frame.grid(row=0, column=1, padx=10, sticky="n")
-        send_btn = ttk.Button(button_frame, text="Send Prompt")
-        cancel_btn = ttk.Button(button_frame, text="Cancel Prompt")
-        reset_btn = ttk.Button(button_frame, text="Reset")
-        back_btn = ttk.Button(button_frame, text="Back to Main Menu")
-        send_btn.pack(fill="x", pady=2)
-        cancel_btn.pack(fill="x", pady=2)
-        reset_btn.pack(fill="x", pady=2)
-        back_btn.pack(fill="x", pady=10)
-
-        tk.Label(container, text="Model response:").grid(row=1, column=0, columnspan=2)
-        txt_out = scrolledtext.ScrolledText(container, width=80, height=20)
-        txt_out.grid(row=2, column=0, columnspan=2)
+        txt_out = scrolledtext.ScrolledText(container, width=100, height=20)
+        txt_out.grid(row=3, column=0, columnspan=2)
 
         def ask():
-            txt_in.config(state="disabled")
             prompt = txt_in.get("1.0", tk.END).strip()
             if not prompt:
                 messagebox.showwarning("Empty Prompt", "Please enter a prompt before clicking Send.")
-                txt_in.config(state="normal")
                 return
-            try:
-                resp = get_response(prompt, self.model_var.get())
-                txt_out.insert(tk.END, f"> {prompt}\n{resp}\n\n")
-                txt_out.see(tk.END)
-            except Exception as e:
-                txt_out.insert(tk.END, f"Error: {e}\n")
-            txt_in.config(state="normal")
             txt_in.delete("1.0", tk.END)
+            for model in selected_models:
+                try:
+                    resp = get_response(prompt, model)
+                    txt_out.insert(tk.END, f"[{model}]\n> {prompt}\n{resp}\n\n")
+                except Exception as e:
+                    txt_out.insert(tk.END, f"[{model}] Error: {e}\n\n")
+            txt_out.see(tk.END)
 
         def cancel():
             txt_in.delete("1.0", tk.END)
@@ -165,16 +120,13 @@ class App:
             win.destroy()
             self.root.deiconify()
 
-        send_btn.config(command=ask)
-        cancel_btn.config(command=cancel)
-        reset_btn.config(command=reset)
-        back_btn.config(command=go_back)
+        button_frame = tk.Frame(container)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+        ttk.Button(button_frame, text="Send Prompt", command=ask).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Cancel Prompt", command=cancel).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Reset", command=reset).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Back to Main Menu", command=go_back).pack(side="left", padx=5)
 
-        def on_enter_key(event):
-            ask()
-            return "break"
-
-        txt_in.bind("<Return>", on_enter_key)
         win.protocol("WM_DELETE_WINDOW", go_back)
 
 def main():
